@@ -72,7 +72,9 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(state);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         permissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
-            Toast.makeText(this, "Review the requested permissions to enable SMS and contacts features.", Toast.LENGTH_LONG).show();
+            boolean granted = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED;
+            Toast.makeText(this, granted ? "SMS permission granted." : "SMS permission is needed to display messages.", Toast.LENGTH_LONG).show();
+            showHome();
         });
         csvLauncher = registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> { if(uri!=null) readCsv(uri); });
         contactLauncher = registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> { if(uri!=null) readCsv(uri); });
@@ -123,10 +125,46 @@ public class MainActivity extends AppCompatActivity {
         content.addView(button("◷  Scheduled messages",()->showScheduled()));
         content.addView(text("Recent conversations",18,true));
         if(ContextCompat.checkSelfPermission(this,Manifest.permission.READ_SMS)==PackageManager.PERMISSION_GRANTED){
-            Cursor c=null;try{c=getContentResolver().query(Uri.parse("content://sms/conversations"),new String[]{"thread_id","address","body","date","read"},null,null,"date DESC");
-                if(c!=null){HashSet<String> seen=new HashSet<>();int n=0;while(c.moveToNext()&&n<50){String address=c.getString(1);if(address==null||seen.contains(address))continue;seen.add(address);String body=c.getString(2);LinearLayout r=row();TextView t=text("●  "+address+"\n"+(body==null?"":body),15,false);r.addView(t,new LinearLayout.LayoutParams(0,-2,1));r.setPadding(0,dp(5),0,dp(5));r.setOnClickListener(v->openConversation(address));content.addView(r);View line=new View(this);line.setBackgroundColor(0xffdce5de);content.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));n++;}}
-            }catch(Exception e){content.addView(text("SMS inbox unavailable: "+e.getMessage(),13,false));}finally{if(c!=null)c.close();}
-        } else content.addView(text("Grant SMS permission to display messages stored on this phone.",14,false));
+            Cursor c=null;
+            try {
+                // Query the SMS provider directly: this includes received and sent SMS.
+                c=getContentResolver().query(Uri.parse("content://sms"),
+                    new String[]{"_id","address","body","date","type","read"},
+                    null,null,"date DESC");
+                if(c!=null){
+                    HashSet<String> seen=new HashSet<>();
+                    int n=0;
+                    while(c.moveToNext() && n<50){
+                        String address=c.getString(c.getColumnIndexOrThrow("address"));
+                        if(address==null || address.trim().isEmpty() || seen.contains(address)) continue;
+                        seen.add(address);
+                        String body=c.getString(c.getColumnIndexOrThrow("body"));
+                        int type=c.getInt(c.getColumnIndexOrThrow("type"));
+                        String preview=(type==2 ? "You: " : "")+(body==null ? "" : body);
+                        LinearLayout r=row();
+                        TextView t=text("●  "+address+"\n"+preview,15,false);
+                        r.addView(t,new LinearLayout.LayoutParams(0,-2,1));
+                        r.setPadding(0,dp(8),0,dp(8));
+                        r.setOnClickListener(v->openConversation(address));
+                        content.addView(r);
+                        View line=new View(this);
+                        line.setBackgroundColor(0xffdce5de);
+                        content.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));
+                        n++;
+                    }
+                    if(n==0) content.addView(text("No SMS messages found on this phone yet.",14,false));
+                } else {
+                    content.addView(text("Could not access the phone's SMS database.",14,false));
+                }
+            } catch(Exception e){
+                content.addView(text("SMS inbox unavailable: "+e.getMessage(),13,false));
+            } finally {
+                if(c!=null) c.close();
+            }
+        } else {
+            content.addView(text("SMS permission is needed to display messages stored on this phone.",14,false));
+            content.addView(button("Grant SMS permission",()->requestNeededPermissions()));
+        }
     }
     void composeNormal(){final EditText phone=new EditText(this);phone.setHint("Recipient phone number");final EditText body=new EditText(this);body.setHint("Write a message");body.setMinLines(3);LinearLayout box=column();box.addView(phone);box.addView(body);new AlertDialog.Builder(this).setTitle("New message").setView(box).setPositiveButton("Save draft",(d,w)->saveDraft("normal:"+phone.getText(),body.getText().toString())).setNeutralButton("Send",(d,w)->sendOne(phone.getText().toString(),body.getText().toString())).setNegativeButton("Cancel",null).show();}
     void openConversation(String address){Cursor c=null;StringBuilder s=new StringBuilder();try{c=getContentResolver().query(Uri.parse("content://sms"),new String[]{"address","body","date","type"}, "address=?",new String[]{address},"date ASC");if(c!=null)while(c.moveToNext())s.append(c.getString(2)).append("  ").append(c.getInt(3)==2?"You: ":"").append(c.getString(1)).append("\n\n");}catch(Exception ignored){}finally{if(c!=null)c.close();}
