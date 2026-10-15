@@ -1,0 +1,7 @@
+package com.mergesms.app;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+public class SmsSentReceiver extends BroadcastReceiver {
+ @Override public void onReceive(Context context, Intent intent) { /* Delivery status persistence is a follow-up integration point. */ }
+}

@@ -1,0 +1,11 @@
+<resources>
+    <style name="Theme.MergeSMS" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#16834A</item>
+        <item name="colorPrimaryVariant">#106B3A</item>
+        <item name="colorSecondary">#16834A</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:statusBarColor">#106B3A</item>
+        <item name="android:navigationBarColor">#F8FAF8</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>
