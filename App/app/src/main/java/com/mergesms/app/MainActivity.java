@@ -54,8 +54,8 @@ public class MainActivity extends AppCompatActivity {
     ArrayList<Map<String,String>> csvRows = new ArrayList<>();
     String currentTab = "Messages";
     ActivityResultLauncher<String[]> permissionLauncher;
-    ActivityResultLauncher<String> csvLauncher;
-    ActivityResultLauncher<String> contactLauncher;
+    ActivityResultLauncher<String[]> csvLauncher;
+    ActivityResultLauncher<String[]> contactLauncher;
 
     static class Recipient {
         String name, phone, status = "Not sent";
@@ -74,8 +74,8 @@ public class MainActivity extends AppCompatActivity {
         permissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
             Toast.makeText(this, "Review the requested permissions to enable SMS and contacts features.", Toast.LENGTH_LONG).show();
         });
-        csvLauncher = registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> { if(uri!=null) readCsv(uri); });
-        contactLauncher = registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> { if(uri!=null) readCsv(uri); });
+        csvLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> { if(uri!=null) readCsv(uri); });
+        contactLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> { if(uri!=null) readCsv(uri); });
         requestNeededPermissions();
         showHome();
     }
