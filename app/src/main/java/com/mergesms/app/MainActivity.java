@@ -99,17 +99,98 @@ public class MainActivity extends AppCompatActivity {
     void styleButton(Button b){b.setAllCaps(false);b.setTextColor(android.graphics.Color.WHITE);b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor(GREEN)));b.setPadding(dp(12),dp(9),dp(12),dp(9));}
     Button button(String label,Runnable action){Button b=new Button(this);b.setText(label);styleButton(b);b.setOnClickListener(v->action.run());return b;}
     void setup(String title,String subtitle){
-        root=column();root.setBackgroundColor(android.graphics.Color.rgb(248,250,248));
+        root=column();
+        root.setBackgroundColor(android.graphics.Color.rgb(242,248,244));
         setContentView(root);
-        LinearLayout header=column();header.setPadding(dp(18),dp(16),dp(18),dp(6));
-        header.addView(text(title,27,true)); if(subtitle!=null)header.addView(text(subtitle,14,false));
+
+        // Green gradient header with branding and three-dot menu.
+        LinearLayout header=row();
+        android.graphics.drawable.GradientDrawable gradient =
+            new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{0xFF075E3B,0xFF16A05A});
+        header.setBackground(gradient);
+        header.setPadding(dp(16),dp(12),dp(6),dp(12));
+
+        LinearLayout titles=column();
+        TextView heading=new TextView(this);
+        heading.setText("MergeSMS".equals(title)?"MergeSMS":title);
+        heading.setTextSize(25);
+        heading.setTypeface(null,android.graphics.Typeface.BOLD);
+        heading.setTextColor(android.graphics.Color.WHITE);
+        titles.addView(heading);
+        if(subtitle!=null){
+            TextView sub=new TextView(this);sub.setText(subtitle);sub.setTextSize(13);
+            sub.setTextColor(0xFFE0F5E8);titles.addView(sub);
+        }
+        header.addView(titles,new LinearLayout.LayoutParams(0,-2,1));
+
+        Button search=new Button(this);search.setText("⌕");search.setTextSize(25);
+        search.setTextColor(android.graphics.Color.WHITE);
+        search.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        search.setOnClickListener(v->{
+            EditText query=new EditText(this);query.setHint("Search messages or contacts");
+            new AlertDialog.Builder(this).setTitle("Search MergeSMS").setView(query)
+                .setPositiveButton("Search",(d,w)->{
+                    String q=query.getText().toString().trim();
+                    if(!q.isEmpty()){
+                        currentTab="Messages";
+                        showMessages();
+                        toast("Search is ready for: "+q);
+                    }
+                }).setNegativeButton("Cancel",null).show();
+        });
+        header.addView(search);
+
+        Button menu=new Button(this);menu.setText("⋮");menu.setTextSize(26);
+        menu.setTextColor(android.graphics.Color.WHITE);
+        menu.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        header.addView(menu);
+        menu.setOnClickListener(v->{
+            android.widget.PopupMenu popup=new android.widget.PopupMenu(this,menu);
+            popup.getMenu().add("Settings").setOnMenuItemClickListener(item->{currentTab="Settings";showSettings();return true;});
+            popup.getMenu().add("Permissions").setOnMenuItemClickListener(item->{requestNeededPermissions();return true;});
+            popup.getMenu().add("Export Data").setOnMenuItemClickListener(item->{
+                new AlertDialog.Builder(this).setTitle("Export Data")
+                    .setMessage("Data export is not implemented yet.")
+                    .setPositiveButton("OK",null).show();return true;});
+            popup.getMenu().add("Help & Support").setOnMenuItemClickListener(item->{
+                new AlertDialog.Builder(this).setTitle("Help & Support")
+                    .setMessage("Use Messages for normal SMS and Bulk SMS for CSV mail merge.")
+                    .setPositiveButton("OK",null).show();return true;});
+            popup.getMenu().add("About").setOnMenuItemClickListener(item->{
+                new AlertDialog.Builder(this).setTitle("About MergeSMS")
+                    .setMessage("MergeSMS 1.0.0\nYour standalone SMS app.")
+                    .setPositiveButton("OK",null).show();return true;});
+            popup.show();
+        });
         root.addView(header);
-        ScrollView sc=new ScrollView(this);content=column();content.setPadding(dp(16),dp(8),dp(16),dp(18));sc.addView(content);
+
+        ScrollView sc=new ScrollView(this);
+        content=column();content.setPadding(dp(16),dp(8),dp(16),dp(8));sc.addView(content);
         root.addView(sc,new LinearLayout.LayoutParams(-1,0,1));
-        nav=row();nav.setPadding(dp(5),dp(5),dp(5),dp(8));nav.setBackgroundColor(android.graphics.Color.WHITE);
-        String[][] items={{"▣","Messages"},{"♙","Contacts"},{"✉","Bulk SMS"},{"⚙","Settings"}};
-        for(String[] it:items){LinearLayout item=column();item.setGravity(Gravity.CENTER);TextView ic=text(it[0],20,true);ic.setGravity(Gravity.CENTER);ic.setTextColor(android.graphics.Color.parseColor(GREEN));item.addView(ic);TextView lb=text(it[1],11,true);lb.setGravity(Gravity.CENTER);item.addView(lb);item.setOnClickListener(v->{currentTab=it[1];showHome();});nav.addView(item,new LinearLayout.LayoutParams(0,-2,1));}
-        root.addView(nav);
+
+        // Floating action opens Contacts and Bulk SMS as popup choices.
+        LinearLayout actionRow=row();actionRow.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        actionRow.setPadding(dp(8),dp(4),dp(16),dp(8));
+        Button actions=new Button(this);actions.setText("＋");actions.setTextSize(25);styleButton(actions);
+        actionRow.addView(actions,new LinearLayout.LayoutParams(dp(58),dp(54)));
+        actions.setOnClickListener(v->{
+            android.widget.PopupMenu popup=new android.widget.PopupMenu(this,actions);
+            popup.getMenu().add("Contacts").setOnMenuItemClickListener(item->{currentTab="Contacts";showContacts();return true;});
+            popup.getMenu().add("Bulk SMS").setOnMenuItemClickListener(item->{currentTab="Bulk SMS";showBulk();return true;});
+            popup.show();
+        });
+        root.addView(actionRow);
+
+        // Messages is the only permanent bottom navigation item.
+        nav=row();nav.setGravity(Gravity.CENTER);nav.setPadding(dp(8),dp(5),dp(8),dp(8));
+        nav.setBackgroundColor(android.graphics.Color.WHITE);
+        Button messages=new Button(this);messages.setText("▣  Messages");messages.setAllCaps(false);
+        messages.setTextColor(android.graphics.Color.parseColor(GREEN));
+        messages.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        messages.setOnClickListener(v->{currentTab="Messages";showMessages();});
+        nav.addView(messages);root.addView(nav);
     }
     void showHome(){
         if("Messages".equals(currentTab)) showMessages();
@@ -131,7 +212,7 @@ public class MainActivity extends AppCompatActivity {
     void composeNormal(){final EditText phone=new EditText(this);phone.setHint("Recipient phone number");final EditText body=new EditText(this);body.setHint("Write a message");body.setMinLines(3);LinearLayout box=column();box.addView(phone);box.addView(body);new AlertDialog.Builder(this).setTitle("New message").setView(box).setPositiveButton("Save draft",(d,w)->saveDraft("normal:"+phone.getText(),body.getText().toString())).setNeutralButton("Send",(d,w)->sendOne(phone.getText().toString(),body.getText().toString())).setNegativeButton("Cancel",null).show();}
     void openConversation(String address){Cursor c=null;StringBuilder s=new StringBuilder();try{c=getContentResolver().query(Uri.parse("content://sms"),new String[]{"address","body","date","type"}, "address=?",new String[]{address},"date ASC");if(c!=null)while(c.moveToNext())s.append(c.getString(2)).append("  ").append(c.getInt(3)==2?"You: ":"").append(c.getString(1)).append("\n\n");}catch(Exception ignored){}finally{if(c!=null)c.close();}
         EditText reply=new EditText(this);reply.setHint("Reply");new AlertDialog.Builder(this).setTitle(address).setMessage(s.toString()).setView(reply).setPositiveButton("Send",(d,w)->sendOne(address,reply.getText().toString())).setNeutralButton("Save draft",(d,w)->saveDraft("normal:"+address,reply.getText().toString())).setNegativeButton("Back",null).show();}
-    void showContacts(){setup("Contacts","Find and message people");content.addView(button("＋  Add recipient manually",()->{EditText n=new EditText(this),p=new EditText(this);n.setHint("Name");p.setHint("Phone number");LinearLayout l=column();l.addView(n);l.addView(p);new AlertDialog.Builder(this).setTitle("Add contact to campaign").setView(l).setPositiveButton("Add",(d,w)->{recipients.add(new Recipient(n.getText().toString(),p.getText().toString()));showContacts();}).setNegativeButton("Cancel",null).show();}));content.addView(button("Import CSV",()->csvLauncher.launch("*/*")));if(ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED){Cursor c=getContentResolver().query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,new String[]{ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,ContactsContract.CommonDataKinds.Phone.NUMBER},null,null,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" ASC");if(c!=null){while(c.moveToNext())content.addView(text(c.getString(0)+"\n"+c.getString(1),15,false));c.close();}}}
+    void showContacts(){setup("Contacts","Find and message people");content.addView(button("＋  Add recipient manually",()->{EditText n=new EditText(this),p=new EditText(this);n.setHint("Name");p.setHint("Phone number");LinearLayout l=column();l.addView(n);l.addView(p);new AlertDialog.Builder(this).setTitle("Add contact to campaign").setView(l).setPositiveButton("Add",(d,w)->{recipients.add(new Recipient(n.getText().toString(),p.getText().toString()));showContacts();}).setNegativeButton("Cancel",null).show();}));if(ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED){Cursor c=getContentResolver().query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,new String[]{ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,ContactsContract.CommonDataKinds.Phone.NUMBER},null,null,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" ASC");if(c!=null){while(c.moveToNext())content.addView(text(c.getString(0)+"\n"+c.getString(1),15,false));c.close();}}}
     void showBulk(){setup("Bulk SMS","Personalized SMS from your phone");content.addView(button("▤  Import CSV file",()->csvLauncher.launch("*/*")));content.addView(text("Imported "+recipients.size()+" recipients (maximum 1,000)",14,false));
         content.addView(text("1. Recipients",18,true));content.addView(button("＋  Add recipient manually",()->{EditText n=new EditText(this),p=new EditText(this);n.setHint("Name");p.setHint("Phone number");LinearLayout l=column();l.addView(n);l.addView(p);new AlertDialog.Builder(this).setTitle("Add recipient").setView(l).setPositiveButton("Add",(d,w)->{recipients.add(new Recipient(n.getText().toString(),p.getText().toString()));showBulk();}).setNegativeButton("Cancel",null).show();}));
         content.addView(button("▣  Show / hide recipient list ("+recipients.size()+")",()->{prefs.edit().putBoolean("recipientsExpanded",!prefs.getBoolean("recipientsExpanded",true)).apply();showBulk();}));
@@ -149,7 +230,7 @@ public class MainActivity extends AppCompatActivity {
     List<String> parseCsv(String line){ArrayList<String> out=new ArrayList<>();StringBuilder b=new StringBuilder();boolean q=false;for(int i=0;i<line.length();i++){char c=line.charAt(i);if(c=='"'){if(q&&i+1<line.length()&&line.charAt(i+1)=='"'){b.append('"');i++;}else q=!q;}else if(c==','&&!q){out.add(b.toString().trim());b.setLength(0);}else b.append(c);}out.add(b.toString().trim());return out;}
     String personalize(Recipient r,String template){String s=template;for(MergeField f:fields)s=s.replace("{"+f.token+"}",r.data.getOrDefault(f.column,""));s=s.replace("{Name}",r.name);s=s.replace("{Phonenumber}",r.phone);return s;}
     void sendOne(String phone,String body){if(phone.trim().isEmpty()||body.trim().isEmpty()){toast("Enter a phone number and message.");return;}if(ContextCompat.checkSelfPermission(this,Manifest.permission.SEND_SMS)!=PackageManager.PERMISSION_GRANTED){requestNeededPermissions();return;}try{SmsManager sm=SmsManager.getDefault();ArrayList<String> parts=sm.divideMessage(body);sm.sendMultipartTextMessage(phone,null,parts,null,null);toast("SMS submitted to Android's SMS service.");}catch(Exception e){toast("Send failed: "+e.getMessage());}}
-    void sendBulk(){String msg=composer==null?"":composer.getText().toString();if(msg.trim().isEmpty()){toast("Write a message first.");return;}ArrayList<Recipient> chosen=new ArrayList<>();for(Recipient r:recipients)if(r.selected)chosen.add(r);if(chosen.isEmpty()){toast("Select at least one recipient.");return;}new AlertDialog.Builder(this).setTitle("Send "+chosen.size()+" SMS messages?").setMessage("Messages will be sent through your device SIM and may incur carrier charges.").setNegativeButton("Cancel",null).setPositiveButton("Send",(d,w)->{int ok=0;for(Recipient r:chosen){try{String msgFor=personalize(r,msg);SmsManager.getDefault().sendMultipartTextMessage(r.phone,null,SmsManager.getDefault().divideMessage(msgFor),null,null);r.status="Submitted";ok++;}catch(Exception e){r.status="Failed";}}saveCampaign(chosen,msg);toast("Submitted "+ok+" of "+chosen.size()+" messages.");showBulk();}).show();}
+    void sendBulk(){String msg=composer==null?"":composer.getText().toString();if(msg.trim().isEmpty()){toast("Write a message first.");return;}ArrayList<Recipient> chosen=new ArrayList<>();for(Recipient r:recipients)if(r.selected)chosen.add(r);if(chosen.isEmpty()){toast("Select at least one recipient.");return;}new AlertDialog.Builder(this).setTitle("Send "+chosen.size()+" SMS messages?").setMessage("Messages will be sent through your device SIM and may incur carrier charges.").setNegativeButton("Cancel",null).setPositiveButton("Send",(d,w)->{int ok=0;for(Recipient r:chosen){try{String msgFor=personalize(r,msg);SmsManager.getDefault().sendMultipartTextMessage(r.phone,null,SmsManager.getDefault().divideMessage(msgFor),null,null);r.status="Submitted";ok++;}catch(Exception e){r.status="Failed";}}saveCampaign(chosen,msg);if(ok>0){prefs.edit().putString("bulkDraft","").apply();for(Recipient sent:chosen)sent.selected=false;}toast("Submitted "+ok+" of "+chosen.size()+" messages.");showBulk();}).show();}
     void saveCampaign(ArrayList<Recipient> chosen,String template){try{JSONArray arr=new JSONArray();for(Recipient r:chosen){JSONObject o=new JSONObject();o.put("phone",r.phone);o.put("name",r.name);o.put("status",r.status);o.put("message",personalize(r,template));arr.put(o);}prefs.edit().putString("lastCampaign",arr.toString()).apply();}catch(Exception ignored){}}
     void scheduleBulk(){String msg=composer==null?"":composer.getText().toString();if(msg.trim().isEmpty()){toast("Write a message first.");return;}Calendar cal=Calendar.getInstance();new DatePickerDialog(this,(v,y,m,d)->{cal.set(y,m,d);new TimePickerDialog(this,(tv,h,min)->{cal.set(Calendar.HOUR_OF_DAY,h);cal.set(Calendar.MINUTE,min);cal.set(Calendar.SECOND,0);if(cal.getTimeInMillis()<=System.currentTimeMillis()){toast("Choose a future time.");return;}saveScheduledCampaign(msg,cal.getTimeInMillis());},cal.get(Calendar.HOUR_OF_DAY),cal.get(Calendar.MINUTE),true).show();},cal.get(Calendar.YEAR),cal.get(Calendar.MONTH),cal.get(Calendar.DAY_OF_MONTH)).show();}
     void saveScheduledCampaign(String msg,long when){try{JSONArray a=new JSONArray(prefs.getString("scheduled","[]"));JSONObject o=new JSONObject();o.put("id",System.currentTimeMillis());o.put("message",msg);o.put("when",when);JSONArray rs=new JSONArray();for(Recipient r:recipients)if(r.selected){JSONObject x=new JSONObject();x.put("phone",r.phone);x.put("name",r.name);x.put("data",new JSONObject(r.data));rs.put(x);}o.put("recipients",rs);a.put(o);prefs.edit().putString("scheduled",a.toString()).apply();Intent i=new Intent(this,ScheduleReceiver.class);i.putExtra("id",o.getLong("id"));PendingIntent pi=PendingIntent.getBroadcast(this,(int)(o.getLong("id")%Integer.MAX_VALUE),i,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);AlarmManager am=(AlarmManager)getSystemService(ALARM_SERVICE);if(Build.VERSION.SDK_INT<31||am.canScheduleExactAlarms())am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,when,pi);else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,when,pi);toast("Bulk campaign scheduled.");}catch(Exception e){toast("Could not schedule: "+e.getMessage());}}
