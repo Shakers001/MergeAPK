@@ -254,7 +254,8 @@ public class MainActivity extends AppCompatActivity {
                 item.setPadding(dp(4),dp(8),dp(4),dp(8));
                 TextView details=text(address+"\n"+preview+"\n"+when,15,false);
                 item.addView(details,new LinearLayout.LayoutParams(0,-2,1));
-                item.setOnClickListener(v->openConversation(address));
+                final String conversationAddress = address;
+                item.setOnClickListener(v -> openConversation(conversationAddress));
                 content.addView(item);
                 View divider=new View(this);
                 divider.setBackgroundColor(0xffdce5de);
