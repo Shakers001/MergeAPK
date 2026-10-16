@@ -170,27 +170,41 @@ public class MainActivity extends AppCompatActivity {
         content=column();content.setPadding(dp(16),dp(8),dp(16),dp(8));sc.addView(content);
         root.addView(sc,new LinearLayout.LayoutParams(-1,0,1));
 
-        // Floating action opens Contacts and Bulk SMS as popup choices.
-        LinearLayout actionRow=row();actionRow.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        // Single floating action button opens Bulk SMS directly.
+        LinearLayout actionRow=row();
+        actionRow.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
         actionRow.setPadding(dp(8),dp(4),dp(16),dp(8));
-        Button actions=new Button(this);actions.setText("＋");actions.setTextSize(25);styleButton(actions);
-        actionRow.addView(actions,new LinearLayout.LayoutParams(dp(58),dp(54)));
-        actions.setOnClickListener(v->{
-            android.widget.PopupMenu popup=new android.widget.PopupMenu(this,actions);
-            popup.getMenu().add("Contacts").setOnMenuItemClickListener(item->{currentTab="Contacts";showContacts();return true;});
-            popup.getMenu().add("Bulk SMS").setOnMenuItemClickListener(item->{currentTab="Bulk SMS";showBulk();return true;});
-            popup.show();
-        });
+        Button bulkAction=new Button(this);
+        bulkAction.setText("✉  Bulk SMS");
+        bulkAction.setAllCaps(false);
+        bulkAction.setTextSize(15);
+        styleButton(bulkAction);
+        actionRow.addView(bulkAction,new LinearLayout.LayoutParams(-2,dp(54)));
+        bulkAction.setOnClickListener(v->{currentTab="Bulk SMS";showBulk();});
         root.addView(actionRow);
 
-        // Messages is the only permanent bottom navigation item.
-        nav=row();nav.setGravity(Gravity.CENTER);nav.setPadding(dp(8),dp(5),dp(8),dp(8));
+        // Bottom navigation keeps Messages and Contacts; Settings is in the menu.
+        nav=row();
+        nav.setGravity(Gravity.CENTER);
+        nav.setPadding(dp(5),dp(5),dp(5),dp(8));
         nav.setBackgroundColor(android.graphics.Color.WHITE);
-        Button messages=new Button(this);messages.setText("▣  Messages");messages.setAllCaps(false);
-        messages.setTextColor(android.graphics.Color.parseColor(GREEN));
+
+        Button messages=new Button(this);
+        messages.setText("▣  Messages");
+        messages.setAllCaps(false);
+        messages.setTextColor("Messages".equals(currentTab)?android.graphics.Color.parseColor(GREEN):0xFF68756D);
         messages.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         messages.setOnClickListener(v->{currentTab="Messages";showMessages();});
-        nav.addView(messages);root.addView(nav);
+        nav.addView(messages,new LinearLayout.LayoutParams(0,-2,1));
+
+        Button contacts=new Button(this);
+        contacts.setText("♙  Contacts");
+        contacts.setAllCaps(false);
+        contacts.setTextColor("Contacts".equals(currentTab)?android.graphics.Color.parseColor(GREEN):0xFF68756D);
+        contacts.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        contacts.setOnClickListener(v->{currentTab="Contacts";showContacts();});
+        nav.addView(contacts,new LinearLayout.LayoutParams(0,-2,1));
+        root.addView(nav);
     }
     void showHome(){
         if("Messages".equals(currentTab)) showMessages();
@@ -203,15 +217,98 @@ public class MainActivity extends AppCompatActivity {
         content.addView(button("＋  New message",()->composeNormal()));
         content.addView(button("◷  Scheduled messages",()->showScheduled()));
         content.addView(text("Recent conversations",18,true));
-        if(ContextCompat.checkSelfPermission(this,Manifest.permission.READ_SMS)==PackageManager.PERMISSION_GRANTED){
-            Cursor c=null;try{c=getContentResolver().query(Uri.parse("content://sms/conversations"),new String[]{"thread_id","address","body","date","read"},null,null,"date DESC");
-                if(c!=null){HashSet<String> seen=new HashSet<>();int n=0;while(c.moveToNext()&&n<50){String address=c.getString(1);if(address==null||seen.contains(address))continue;seen.add(address);String body=c.getString(2);LinearLayout r=row();TextView t=text("●  "+address+"\n"+(body==null?"":body),15,false);r.addView(t,new LinearLayout.LayoutParams(0,-2,1));r.setPadding(0,dp(5),0,dp(5));r.setOnClickListener(v->openConversation(address));content.addView(r);View line=new View(this);line.setBackgroundColor(0xffdce5de);content.addView(line,new LinearLayout.LayoutParams(-1,dp(1)));n++;}}
-            }catch(Exception e){content.addView(text("SMS inbox unavailable: "+e.getMessage(),13,false));}finally{if(c!=null)c.close();}
-        } else content.addView(text("Grant SMS permission to display messages stored on this phone.",14,false));
+
+        if(ContextCompat.checkSelfPermission(this,Manifest.permission.READ_SMS)!=PackageManager.PERMISSION_GRANTED){
+            content.addView(text("SMS permission is required to read messages saved on this phone.",14,false));
+            content.addView(button("Grant SMS permission",()->requestNeededPermissions()));
+            return;
+        }
+
+        Cursor c=null;
+        try {
+            // Query the actual SMS table. The conversations virtual table does not
+            // reliably expose address/body columns on all Android devices.
+            Uri smsUri=Uri.parse("content://sms");
+            String[] projection={"_id","address","body","date","type","read"};
+            c=getContentResolver().query(smsUri,projection,null,null,"date DESC");
+            if(c==null){
+                content.addView(text("Android did not provide the SMS inbox. Check that MergeSMS has SMS access and is allowed to read messages.",14,false));
+                return;
+            }
+
+            HashSet<String> seen=new HashSet<>();
+            int shown=0;
+            while(c.moveToNext() && shown<100){
+                String address=c.getString(c.getColumnIndexOrThrow("address"));
+                if(address==null || address.trim().isEmpty()) address="Unknown sender";
+                if(seen.contains(address)) continue;
+                seen.add(address);
+
+                String body=c.getString(c.getColumnIndexOrThrow("body"));
+                long date=c.getLong(c.getColumnIndexOrThrow("date"));
+                int type=c.getInt(c.getColumnIndexOrThrow("type"));
+                String preview=(type==2?"You: ":"")+(body==null?"":body);
+                String when=new SimpleDateFormat("d MMM, h:mm a",Locale.getDefault()).format(new Date(date));
+
+                LinearLayout item=row();
+                item.setPadding(dp(4),dp(8),dp(4),dp(8));
+                TextView details=text(address+"\n"+preview+"\n"+when,15,false);
+                item.addView(details,new LinearLayout.LayoutParams(0,-2,1));
+                item.setOnClickListener(v->openConversation(address));
+                content.addView(item);
+                View divider=new View(this);
+                divider.setBackgroundColor(0xffdce5de);
+                content.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));
+                shown++;
+            }
+            if(shown==0){
+                content.addView(text("No SMS messages were found in the phone's SMS storage.",14,false));
+                content.addView(text("If your messages appear in another messaging app, set MergeSMS as the default SMS app in Android Settings, then reopen this screen.",13,false));
+            }
+        } catch(Exception e){
+            content.addView(text("Could not load SMS messages: "+e.getMessage(),13,false));
+            content.addView(button("Try again",()->showMessages()));
+        } finally { if(c!=null)c.close(); }
     }
     void composeNormal(){final EditText phone=new EditText(this);phone.setHint("Recipient phone number");final EditText body=new EditText(this);body.setHint("Write a message");body.setMinLines(3);LinearLayout box=column();box.addView(phone);box.addView(body);new AlertDialog.Builder(this).setTitle("New message").setView(box).setPositiveButton("Save draft",(d,w)->saveDraft("normal:"+phone.getText(),body.getText().toString())).setNeutralButton("Send",(d,w)->sendOne(phone.getText().toString(),body.getText().toString())).setNegativeButton("Cancel",null).show();}
-    void openConversation(String address){Cursor c=null;StringBuilder s=new StringBuilder();try{c=getContentResolver().query(Uri.parse("content://sms"),new String[]{"address","body","date","type"}, "address=?",new String[]{address},"date ASC");if(c!=null)while(c.moveToNext())s.append(c.getString(2)).append("  ").append(c.getInt(3)==2?"You: ":"").append(c.getString(1)).append("\n\n");}catch(Exception ignored){}finally{if(c!=null)c.close();}
-        EditText reply=new EditText(this);reply.setHint("Reply");new AlertDialog.Builder(this).setTitle(address).setMessage(s.toString()).setView(reply).setPositiveButton("Send",(d,w)->sendOne(address,reply.getText().toString())).setNeutralButton("Save draft",(d,w)->saveDraft("normal:"+address,reply.getText().toString())).setNegativeButton("Back",null).show();}
+    void openConversation(String address){
+        Cursor c=null;
+        LinearLayout thread=column();
+        ScrollView history=new ScrollView(this);
+        try {
+            c=getContentResolver().query(Uri.parse("content://sms"),
+                new String[]{"address","body","date","type"},
+                "address=?",new String[]{address},"date ASC");
+            if(c!=null){
+                while(c.moveToNext()){
+                    long date=c.getLong(2);
+                    int type=c.getInt(3);
+                    String body=c.getString(1);
+                    String label=type==2?"You":(type==1?address:(type==3?"Queued":address));
+                    TextView bubble=text(label+"  •  "+new SimpleDateFormat("d MMM, h:mm a",Locale.getDefault()).format(new Date(date))+"\n"+(body==null?"":body),14,false);
+                    bubble.setPadding(dp(12),dp(8),dp(12),dp(8));
+                    bubble.setBackgroundColor(type==2?0xffd9f3e2:0xffeeeeee);
+                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
+                    lp.setMargins(0,dp(3),0,dp(3));
+                    thread.addView(bubble,lp);
+                }
+            }
+        } catch(Exception e){
+            thread.addView(text("Could not load this conversation: "+e.getMessage(),13,false));
+        } finally { if(c!=null)c.close(); }
+
+        history.addView(thread);
+        EditText reply=new EditText(this);
+        reply.setHint("Reply to "+address);
+        reply.setMinLines(2);
+        LinearLayout box=column();
+        box.addView(history,new LinearLayout.LayoutParams(-1,dp(300)));
+        box.addView(reply);
+        new AlertDialog.Builder(this).setTitle(address).setView(box)
+            .setPositiveButton("Send",(d,w)->sendOne(address,reply.getText().toString()))
+            .setNeutralButton("Save draft",(d,w)->saveDraft("normal:"+address,reply.getText().toString()))
+            .setNegativeButton("Close",null).show();
+    }
     void showContacts(){setup("Contacts","Find and message people");content.addView(button("＋  Add recipient manually",()->{EditText n=new EditText(this),p=new EditText(this);n.setHint("Name");p.setHint("Phone number");LinearLayout l=column();l.addView(n);l.addView(p);new AlertDialog.Builder(this).setTitle("Add contact to campaign").setView(l).setPositiveButton("Add",(d,w)->{recipients.add(new Recipient(n.getText().toString(),p.getText().toString()));showContacts();}).setNegativeButton("Cancel",null).show();}));if(ContextCompat.checkSelfPermission(this,Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_GRANTED){Cursor c=getContentResolver().query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,new String[]{ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,ContactsContract.CommonDataKinds.Phone.NUMBER},null,null,ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME+" ASC");if(c!=null){while(c.moveToNext())content.addView(text(c.getString(0)+"\n"+c.getString(1),15,false));c.close();}}}
     void showBulk(){setup("Bulk SMS","Personalized SMS from your phone");content.addView(button("▤  Import CSV file",()->csvLauncher.launch("*/*")));content.addView(text("Imported "+recipients.size()+" recipients (maximum 1,000)",14,false));
         content.addView(text("1. Recipients",18,true));content.addView(button("＋  Add recipient manually",()->{EditText n=new EditText(this),p=new EditText(this);n.setHint("Name");p.setHint("Phone number");LinearLayout l=column();l.addView(n);l.addView(p);new AlertDialog.Builder(this).setTitle("Add recipient").setView(l).setPositiveButton("Add",(d,w)->{recipients.add(new Recipient(n.getText().toString(),p.getText().toString()));showBulk();}).setNegativeButton("Cancel",null).show();}));
